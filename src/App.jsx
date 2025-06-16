@@ -165,6 +165,21 @@ function App() {
     if (!file) return alert("Pick a file");
     try {
       const buf = new Uint8Array(await file.arrayBuffer());
+      console.log("File buffer size:", buf.length);
+      console.log(sdk, "Uploading file:", file.name, "to IPFS");
+      if (buf.length > 1000000) {
+        return alert("File too large, max 1MB");
+      }
+      console.log(typeof(buf), "Buffer type:", buf instanceof Uint8Array ? "Uint8Array" : "Other");
+      if (buf.length === 0) {
+        return alert("File is empty");
+      }
+      if (!fileMeta.trim()) {
+        return alert("Enter file metadata (name, description, etc.)");
+      }
+      console.log("File metadata:", fileMeta.trim());
+      // Upload to IPFS
+      showStatus("info", "Uploading file to IPFS...");
       const { cid } = await sdk.uploadFile(buf, ah, "User", fileMeta.trim());
       showStatus("success", `Uploaded: ${cid}`);
     } catch (e) {
