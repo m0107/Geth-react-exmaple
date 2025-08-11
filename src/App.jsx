@@ -5,7 +5,7 @@ import "./App.css";
 function App() {
   const sdkRef = useRef(null);
   useEffect(() => {
-    console.log("process.env.REACT_APP_RPC_URL", process.env.REACT_APP_RPC_URL);
+    console.log("process.env.REACT_APP_RPC_URL", process.env);
     console.log("window.BlockchainSDK:", window.BlockchainSDK);
     if (!sdkRef.current) {
       sdkRef.current = new window.BlockchainSDK.default(
@@ -13,7 +13,7 @@ function App() {
         process.env.REACT_APP_OTP_ORACLE_PUBLIC_KEY,
         process.env.REACT_APP_IPFS_URL,
         process.env.REACT_APP_BLC_API_BASE,
-        process.env.BLC_FUND_API_BASE,
+        process.env.REACT_APP_BLC_FUND_API_BASE,
         process.env.REACT_APP_ENT_API_BASE,
         process.env.REACT_APP_ENT_USERNAME,
         process.env.REACT_APP_ENT_PASSWORD
@@ -22,7 +22,8 @@ function App() {
     }
   }, []);
   const sdk = sdkRef.current;
-  console.log("SDK instance:", sdk);
+  console.log("SDK instance:", process.env);
+  console.log("process.BLC_FUND_API_BASE", process.env.REACT_APP_BLC_FUND_API_BASE, process.env.REACT_APP_RPC_URL)
 
   const [mainStatus, setMainStatus] = useState({
     type: "info",
