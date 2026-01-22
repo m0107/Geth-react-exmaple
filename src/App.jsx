@@ -41,6 +41,22 @@ function App() {
   const [showLoanSection, setShowLoanSection] = useState(false);
   const [showFileSection, setShowFileSection] = useState(false);
   const [showAdminSection, setShowAdminSection] = useState(false);
+  const [showDataManagerSection, setShowDataManagerSection] = useState(false);
+
+  // DataManager states
+  const [recordId, setRecordId] = useState("");
+  const [recordOwner, setRecordOwner] = useState("");
+  const [recordCollection, setRecordCollection] = useState("users");
+  const [recordData, setRecordData] = useState('{"name":"John","age":30}');
+  const [records, setRecords] = useState([]);
+  const [recordMetadata, setRecordMetadata] = useState(null);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [recordExists, setRecordExists] = useState(null);
+  const [updateRecordId, setUpdateRecordId] = useState("");
+  const [updateRecordData, setUpdateRecordData] = useState("");
+  const [showUpdateRecordForm, setShowUpdateRecordForm] = useState(false);
+  const [searchCollection, setSearchCollection] = useState("users");
+  const [searchOwner, setSearchOwner] = useState("");
 
   const [aadhaar, setAadhaar] = useState("");
   const [isNewUser, setIsNewUser] = useState(false);
@@ -117,17 +133,26 @@ function App() {
     { name: "Request OTP", signature: "requestOtp(bytes32)" },
     { name: "Submit OTP", signature: "submitOtp(bytes32,string,address)" },
     { name: "Fund Account", signature: "fundAccount(address,uint256)" },
-    { name: "Create Default Admin", signature: "createDefaultAdmin(bytes32,string,string)" }
+    { name: "Create Default Admin", signature: "createDefaultAdmin(bytes32,string,string)" },
+    { name: "Create Record", signature: "createRecord(bytes32,bytes32,string,string)" },
+    { name: "Update Record", signature: "updateRecord(bytes32,string)" },
+    { name: "Delete Record", signature: "deleteRecord(bytes32)" },
+    { name: "Get Record", signature: "getRecord(bytes32)" },
+    { name: "Get Records By Owner", signature: "getRecordsByOwner(bytes32)" },
+    { name: "Get Records By Collection", signature: "getRecordsByCollection(string)" },
+    { name: "Get All Records", signature: "getAllRecords()" },
+    { name: "Batch Create Records", signature: "batchCreateRecords(bytes32[],bytes32[],string[],string[])" }
   ];
 
   // Note: These are example roles - actual roles should be fetched from your smart contract
   const availableRoles = [
-    "DEFAULT_ADMIN_ROLE",
-    "ADMIN_ROLE",
-    "USER_ROLE", 
-    "LOAN_OFFICER_ROLE",
-    "AUDITOR_ROLE",
-    "MANAGER_ROLE"
+    "ADMIN_ROLE", // Only predefined role
+    "DATA_MANAGER", // Example custom role for DataManager functions
+    "USER_MANAGER", // Example custom role for user management
+    "LOAN_OFFICER", // Example custom role for loan operations
+    "OPERATOR", // Example custom role for operations
+    "VIEWER", // Example custom role for read-only access
+    "AUDITOR", // Example custom role for audit functions
   ];
 
   const handleInit = async () => {
@@ -156,6 +181,7 @@ function App() {
       setShowLoanSection(true);
       setShowFileSection(true);
       setShowAdminSection(true);
+      setShowDataManagerSection(true);
       setShowFunctionRoleSection(true);
       setShowRoleMembersSection(true);
       setShowRoleFunctionsSection(true);
@@ -502,6 +528,180 @@ function App() {
     }
   };
 
+  // DataManager Handler Functions
+  const handleCreateRecord = async () => {
+    if (!recordId.trim() || !recordData.trim()) {
+      return showStatus("error", "Record ID and Data are required");
+    }
+    
+    try {
+      const ownerHash = recordOwner.trim() ? 
+        sdk.web3.utils.keccak256(recordOwner.trim()) : 
+        sdk.web3.utils.keccak256(aadhaar);
+      const recId = sdk.web3.utils.keccak256(recordId.trim());
+      
+      await sdk.createRecord(recId, ownerHash, recordCollection, recordData.trim());
+      showStatus("success", `Record created with ID: ${recordId}`);
+      setRecordId("");
+      setRecordData('{"name":"John","age":30}');
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Create record failed: " + e.message);
+    }
+  };
+
+  const handleGetRecord = async () => {
+    if (!recordId.trim()) {
+      return showStatus("error", "Record ID is required");
+    }
+    
+    try {
+      const recId = sdk.web3.utils.keccak256(recordId.trim());
+      const record = await sdk.getRecord(recId);
+      setRecords([record]);
+      showStatus("success", "Record retrieved");
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Get record failed: " + e.message);
+    }
+  };
+
+  const handleGetAllRecords = async () => {
+    try {
+      showStatus("info", "Fetching all records...");
+      const allRecords = await sdk.getAllRecords();
+      setRecords(allRecords);
+      showStatus("success", `Retrieved ${allRecords.length} records`);
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Get all records failed: " + e.message);
+    }
+  };
+
+  const handleGetRecordsByCollection = async () => {
+    try {
+      showStatus("info", `Fetching records from ${searchCollection}...`);
+      const collectionRecords = await sdk.getRecordsByCollection(searchCollection);
+      setRecords(collectionRecords);
+      showStatus("success", `Retrieved ${collectionRecords.length} records from ${searchCollection}`);
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Get records by collection failed: " + e.message);
+    }
+  };
+
+  const handleGetRecordsByOwner = async () => {
+    try {
+      const ownerHash = searchOwner.trim() ? 
+        sdk.web3.utils.keccak256(searchOwner.trim()) : 
+        sdk.web3.utils.keccak256(aadhaar);
+      
+      showStatus("info", "Fetching records by owner...");
+      const ownerRecords = await sdk.getRecordsByOwner(ownerHash);
+      setRecords(ownerRecords);
+      showStatus("success", `Retrieved ${ownerRecords.length} records for owner`);
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Get records by owner failed: " + e.message);
+    }
+  };
+
+  const handleGetRecordsByCollectionAndOwner = async () => {
+    try {
+      const ownerHash = searchOwner.trim() ? 
+        sdk.web3.utils.keccak256(searchOwner.trim()) : 
+        sdk.web3.utils.keccak256(aadhaar);
+      
+      showStatus("info", `Fetching records from ${searchCollection} by owner...`);
+      const records = await sdk.getRecordsByCollectionAndOwner(searchCollection, ownerHash);
+      setRecords(records);
+      showStatus("success", `Retrieved ${records.length} records`);
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Get records by collection and owner failed: " + e.message);
+    }
+  };
+
+  const handleUpdateRecord = async () => {
+    if (!updateRecordId.trim() || !updateRecordData.trim()) {
+      return showStatus("error", "Record ID and new data are required");
+    }
+    
+    try {
+      const recId = sdk.web3.utils.keccak256(updateRecordId.trim());
+      await sdk.updateRecord(recId, updateRecordData.trim());
+      showStatus("success", "Record updated successfully");
+      setShowUpdateRecordForm(false);
+      setUpdateRecordId("");
+      setUpdateRecordData("");
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Update record failed: " + e.message);
+    }
+  };
+
+  const handleDeleteRecord = async (recordIdToDelete) => {
+    if (!recordIdToDelete) {
+      return showStatus("error", "Record ID is required");
+    }
+    
+    try {
+      if (confirm(`Are you sure you want to delete record: ${recordIdToDelete}?`)) {
+        const recId = sdk.web3.utils.keccak256(recordIdToDelete);
+        await sdk.deleteRecord(recId);
+        showStatus("success", "Record deleted successfully");
+        // Refresh records list
+        handleGetAllRecords();
+      }
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Delete record failed: " + e.message);
+    }
+  };
+
+  const handleGetTotalRecords = async () => {
+    try {
+      const total = await sdk.getTotalRecords();
+      setTotalRecords(total);
+      showStatus("success", `Total records: ${total}`);
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Get total records failed: " + e.message);
+    }
+  };
+
+  const handleCheckRecordExists = async () => {
+    if (!recordId.trim()) {
+      return showStatus("error", "Record ID is required");
+    }
+    
+    try {
+      const recId = sdk.web3.utils.keccak256(recordId.trim());
+      const exists = await sdk.recordExists(recId);
+      setRecordExists(exists);
+      showStatus("success", `Record ${exists ? 'exists' : 'does not exist'}`);
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Check record exists failed: " + e.message);
+    }
+  };
+
+  const handleGetRecordMetadata = async () => {
+    if (!recordId.trim()) {
+      return showStatus("error", "Record ID is required");
+    }
+    
+    try {
+      const recId = sdk.web3.utils.keccak256(recordId.trim());
+      const metadata = await sdk.getRecordMetadata(recId);
+      setRecordMetadata(metadata);
+      showStatus("success", "Record metadata retrieved");
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Get record metadata failed: " + e.message);
+    }
+  };
+
   return (
     <div className="container">
       <h1>🔐 BlockchainSDK Full Test Suite</h1>
@@ -512,10 +712,393 @@ function App() {
 
       {/* SDK Functions Documentation */}
       <section style={{ backgroundColor: '#f8f9fa', padding: '1.5rem', borderRadius: '8px', marginBottom: '2rem' }}>
+        <h2>📚 Complete SDK Functions & RBAC Requirements</h2>
+        <details>
+          <summary style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '1rem' }}>
+            Click to view all SDK functions with detailed RBAC requirements and usage
+          </summary>
+          
+          <div style={{ marginTop: '1rem' }}>
+            
+            {/* RBAC Overview */}
+            <div style={{ marginBottom: '2rem', border: '2px solid #dc3545', borderRadius: '8px', padding: '1.5rem', backgroundColor: '#fff5f5' }}>
+              <h3 style={{ color: '#dc3545', marginTop: 0 }}>🔐 IMPORTANT: RBAC System Overview</h3>
+              
+              <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '6px' }}>
+                <h4 style={{ margin: '0 0 0.5rem 0' }}>Actual Role Structure:</h4>
+                <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
+                  <li><strong>ADMIN_ROLE:</strong> Only predefined role (keccak256("ADMIN_ROLE"))</li>
+                  <li><strong>Custom Roles:</strong> Must be created using RBACManager.createRole(roleName)</li>
+                  <li><strong>No Predefined USER_ROLE:</strong> All roles except ADMIN_ROLE must be created manually</li>
+                </ul>
+              </div>
+
+              <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#fff3cd', borderRadius: '6px' }}>
+                <h4 style={{ margin: '0 0 0.5rem 0' }}>Function Access Control:</h4>
+                <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
+                  <li><strong>DataManager:</strong> ALL functions require role assignment via assignFunctionRole()</li>
+                  <li><strong>UserManagement:</strong> Some functions allow owner access OR role-based access</li>
+                  <li><strong>KeyRegistry:</strong> NO RBAC - all functions are public</li>
+                  <li><strong>FileRegistry:</strong> NO RBAC - all functions are public</li>
+                  <li><strong>RBACManager:</strong> Admin functions require ADMIN_ROLE</li>
+                </ul>
+              </div>
+
+              <div style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#d1ecf1', borderRadius: '6px' }}>
+                <h4 style={{ margin: '0 0 0.5rem 0' }}>Required Setup Steps:</h4>
+                <ol style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
+                  <li>Admin creates roles: <code>rbac.createRole("DATA_MANAGER")</code></li>
+                  <li>Admin assigns function permissions: <code>rbac.assignFunctionRole("DATA_MANAGER", createRecordSelector)</code></li>
+                  <li>Admin grants role to users: <code>rbac.grantRoleByName("DATA_MANAGER", userAddress)</code></li>
+                  <li>Users can then call functions they have permissions for</li>
+                </ol>
+              </div>
+
+              <div style={{ padding: '1rem', backgroundColor: '#f8d7da', borderRadius: '6px' }}>
+                <strong>⚠️ Current Status:</strong> Most DataManager functions will fail until proper role setup is completed via RBACManager.
+              </div>
+            </div>
+            
+            {/* Authentication & Core Functions */}
+            <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1rem', backgroundColor: 'white' }}>
+              <h3 style={{ color: '#0066cc', marginTop: 0 }}>🔐 Authentication & Core Functions</h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>init(aadhaar, isNewUser, userData)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Initialize SDK with Aadhaar validation</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public function)
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>requestOtp(aadhaar)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Request OTP for new user registration</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public function)
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>submitOtp(requestId, otp, userAddress)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Verify OTP and complete registration</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public function)
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>fundAccount(address, amount)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Add test funds to account (test network only)</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public function)
+                </div>
+              </div>
+            </div>
+
+            {/* User Management Functions */}
+            <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1rem', backgroundColor: 'white' }}>
+              <h3 style={{ color: '#28a745', marginTop: 0 }}>👤 User Management Functions</h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>createUser(aadhaarHash, dataJson)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Create new user on blockchain</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ USER_ROLE or higher required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>updateUser(aadhaarHash, newDataJson)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Update existing user data</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ Owner OR user with assigned role for function
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getUser(aadhaarHash)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Retrieve user information</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public view function)
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getAllUsers()</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Get list of all users</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public view function)
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>createDefaultAdmin(aadhaarHash, dataJson)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Create the first admin user</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 DEFAULT_ADMIN_ROLE required
+                </div>
+              </div>
+            </div>
+
+            {/* Data Management Functions */}
+            <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1rem', backgroundColor: 'white' }}>
+              <h3 style={{ color: '#e83e8c', marginTop: 0 }}>📊 Data Management Functions</h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>createRecord(recordId, ownerId, collection, dataJson)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Create new data record in collection</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ USER_ROLE or higher required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>updateRecord(recordId, newDataJson)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Update existing record data</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 Role must be assigned to function via assignFunctionRole()
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>deleteRecord(recordId)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Soft delete a record</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 Role must be assigned to function via assignFunctionRole()
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getRecord(recordId)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Retrieve single record by ID</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 Role must be assigned to function via assignFunctionRole()
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getRecordsByOwner(ownerId)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>List all records belonging to specific owner</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ Own records or ADMIN_ROLE for others
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getRecordsByCollection(collection)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>List all records in specific collection</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 ADMIN_ROLE or collection access required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getAllRecords()</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Get all records in the system</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 ADMIN_ROLE required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>batchCreateRecords(recordIds, ownerIds, collections, dataJsons)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Create multiple records in single transaction</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 ADMIN_ROLE or MANAGER_ROLE required
+                </div>
+              </div>
+            </div>
+
+            {/* File Management Functions */}
+            <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1rem', backgroundColor: 'white' }}>
+              <h3 style={{ color: '#fd7e14', marginTop: 0 }}>📁 File Management Functions</h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>uploadFile(buffer, aadhaarHash, fileType, metadata)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Upload file to IPFS with encryption</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ USER_ROLE or higher required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>readFile(cid, userAddr)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Download and decrypt file from IPFS</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ File owner or granted access required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getAllFilesForUser(aadhaarHash)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>List all files for specific user</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ Own files or ADMIN_ROLE for others
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getAllFilesByType(fileType)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Get all files of specific type</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 ADMIN_ROLE required
+                </div>
+              </div>
+            </div>
+
+            {/* Loan Management Functions */}
+            <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1rem', backgroundColor: 'white' }}>
+              <h3 style={{ color: '#dc3545', marginTop: 0 }}>💰 Loan Management Functions</h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>createLoan(loanIdHash, userAadhaarHash, loanDetailsJson)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Create new loan record</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ LOAN_OFFICER_ROLE or ADMIN_ROLE required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>updateLoan(loanIdHash, newDataJson)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Update loan information</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ LOAN_OFFICER_ROLE or ADMIN_ROLE required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getLoanByLoanId(loanIdHash)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Retrieve specific loan details</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ Loan borrower, LOAN_OFFICER_ROLE, or ADMIN_ROLE
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getAllLoansByUser(userAadhaarHash)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Get all loans for a user</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ Own loans, LOAN_OFFICER_ROLE, or ADMIN_ROLE
+                </div>
+              </div>
+            </div>
+
+            {/* Role & Access Management Functions */}
+            <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1rem', backgroundColor: 'white' }}>
+              <h3 style={{ color: '#6f42c1', marginTop: 0 }}>🔒 Role & Access Management Functions</h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>createRole(roleName, adminRoleName)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Create new role in system</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 DEFAULT_ADMIN_ROLE required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>grantRole(roleName, address)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Assign role to user address</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 Role admin or DEFAULT_ADMIN_ROLE required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>revokeRole(roleName, address)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Remove role from user</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 Role admin or DEFAULT_ADMIN_ROLE required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>assignFunctionRolesFor(roleName, functionSignature)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Assign function permissions to role</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 DEFAULT_ADMIN_ROLE required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>hasRole(roleName, address)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Check if user has specific role</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Read-only function)
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getRoleMembers(roleHash)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Get all members of a role</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ ADMIN_ROLE or AUDITOR_ROLE required
+                </div>
+              </div>
+            </div>
+
+            {/* Key Management Functions */}
+            <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1rem', backgroundColor: 'white' }}>
+              <h3 style={{ color: '#17a2b8', marginTop: 0 }}>🔑 Key Management Functions</h3>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>registerPublicKey(userAddress, pubHex)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Register user's public key on-chain</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ USER_ROLE or self-registration
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getUserPublicKey(aadhaarHash)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Retrieve user's public key</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public key is public)
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>storeEncryptedKey(fileId, userAddress, encryptedKey)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Store encrypted file access key</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ File owner or ADMIN_ROLE required
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getEncryptedKey(fileId, userAddress)</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Retrieve encrypted file access key</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ⚠️ Authorized user or file owner required
+                </div>
+              </div>
+            </div>
+
+            {/* RBAC Legend */}
+            <div style={{ padding: '1rem', backgroundColor: '#e9ecef', borderRadius: '6px' }}>
+              <h4 style={{ margin: '0 0 1rem 0', color: '#495057' }}>🛡️ RBAC Access Levels Legend</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '0.5rem', fontSize: '0.9rem' }}>
+                <div><span style={{ color: '#28a745' }}>✅ Public</span> - No authentication required</div>
+                <div><span style={{ color: '#ffc107' }}>⚠️ Restricted</span> - Role-based access required</div>
+                <div><span style={{ color: '#dc3545' }}>🔒 Admin Only</span> - Admin or higher privileges required</div>
+              </div>
+              
+              <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                <strong>Note:</strong> RBAC enforcement depends on smart contract implementation. 
+                Some functions may have additional business logic restrictions beyond role requirements.
+              </div>
+            </div>
+
+          </div>
+        </details>
+      </section>
+
+      {/* SDK Functions Documentation */}
+      <section style={{ backgroundColor: '#f8f9fa', padding: '1.5rem', borderRadius: '8px', marginBottom: '2rem' }}>
         <h2>📚 Available SDK Functions</h2>
         <details>
           <summary style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '1rem' }}>
-            Click to view all SDK functions, limitations, and sample usage
+            Click to view all SDK functions with detailed examples and usage
           </summary>
           
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
@@ -528,8 +1111,10 @@ function App() {
                 <strong>init(aadhaar, isNewUser, userData)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Initialize SDK with Aadhaar validation
-                  <br /><strong>Limitations:</strong> Requires 12-digit Aadhaar, network connectivity
-                  <br /><strong>Sample:</strong> <code>await sdk.init("123412341234", false)</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>await sdk.init("123412341234", true, {`{name: "John", email: "john@test.com"}`})</code>
+                  <br /><code>await sdk.init("987698769876", false, null) // Existing user</code>
+                  <br /><code>const result = await sdk.init(aadhaar, isNew, {`{department: "Finance", role: "Manager"}`})</code>
                 </p>
               </div>
 
@@ -537,8 +1122,10 @@ function App() {
                 <strong>requestOtp(aadhaar)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Request OTP for new user registration
-                  <br /><strong>Limitations:</strong> Requires on-chain gas fees
-                  <br /><strong>Sample:</strong> <code>const requestId = await sdk.requestOtp("123412341234")</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>const reqId = await sdk.requestOtp("123412341234")</code>
+                  <br /><code>const requestId = await sdk.requestOtp(aadhaarHash)</code>
+                  <br /><code>console.log("OTP Request ID:", await sdk.requestOtp("987698769876"))</code>
                 </p>
               </div>
 
@@ -546,8 +1133,10 @@ function App() {
                 <strong>submitOtp(requestId, otp, userAddress)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Verify OTP and complete registration
-                  <br /><strong>Limitations:</strong> OTP expires, one-time use
-                  <br /><strong>Sample:</strong> <code>await sdk.submitOtp(requestId, "123456", userAddress)</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>await sdk.submitOtp(requestId, "123456", userAddress)</code>
+                  <br /><code>await sdk.submitOtp(reqId, otpCode, "0x742d35Cc6551C5e5e8f6B4c47e6", userAddress)</code>
+                  <br /><code>const success = await sdk.submitOtp(requestId, "987654", currentUserAddress)</code>
                 </p>
               </div>
             </div>
@@ -560,8 +1149,10 @@ function App() {
                 <strong>createUser(aadhaarHash, dataJson)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Create new user on blockchain
-                  <br /><strong>Limitations:</strong> Must call init() first, gas fees required
-                  <br /><strong>Sample:</strong> <code>await sdk.createUser(hash, JSON.stringify(userData))</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>await sdk.createUser(aadhaarHash, JSON.stringify({`{name: "John"}`}), publicKey)</code>
+                  <br /><code>const userData = {`{name: "Jane", dept: "HR", phone: "+91987654321"}`}</code>
+                  <br /><code>await sdk.createUser(hash, JSON.stringify(userData), "04a1b2c3...")</code>
                 </p>
               </div>
 
@@ -569,8 +1160,10 @@ function App() {
                 <strong>getUser(aadhaarHash)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Retrieve user information
-                  <br /><strong>Limitations:</strong> Requires proper access permissions
-                  <br /><strong>Sample:</strong> <code>const user = await sdk.getUser(aadhaarHash)</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>const user = await sdk.getUser(aadhaarHash)</code>
+                  <br /><code>{`const {dataJson, publicKey} = await sdk.getUser("0xa1b2c3...")`}</code>
+                  <br /><code>console.log(await sdk.getUser(userHash))</code>
                 </p>
               </div>
 
@@ -578,8 +1171,10 @@ function App() {
                 <strong>updateUser(aadhaarHash, newDataJson)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Update existing user data
-                  <br /><strong>Limitations:</strong> Only user or admin can update
-                  <br /><strong>Sample:</strong> <code>await sdk.updateUser(hash, JSON.stringify(newData))</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>await sdk.updateUser(hash, JSON.stringify({`{name: "John Updated"}`}))</code>
+                  <br /><code>const newData = {`{dept: "Sales", phone: "+91123456789"}`}</code>
+                  <br /><code>await sdk.updateUser(aadhaarHash, JSON.stringify(newData))</code>
                 </p>
               </div>
 
@@ -587,8 +1182,10 @@ function App() {
                 <strong>getAllUsers()</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Get list of all users
-                  <br /><strong>Limitations:</strong> Admin access only
-                  <br /><strong>Sample:</strong> <code>const users = await sdk.getAllUsers()</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>const users = await sdk.getAllUsers()</code>
+                  <br /><code>const userList = await sdk.getAllUsers()</code>
+                  <br /><code>console.log("Total users:", (await sdk.getAllUsers()).length)</code>
                 </p>
               </div>
             </div>
@@ -601,8 +1198,10 @@ function App() {
                 <strong>uploadFile(buffer, aadhaarHash, fileType, metadata)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Upload file to IPFS with encryption
-                  <br /><strong>Limitations:</strong> Max 1MB, fileType must be "User" or "Loan"
-                  <br /><strong>Sample:</strong> <code>await sdk.uploadFile(buffer, hash, "User", "report.pdf")</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>await sdk.uploadFile(buffer, hash, "User", "profile.pdf")</code>
+                  <br /><code>const cid = await sdk.uploadFile(fileBuffer, aadhaarHash, "Loan", "agreement.doc")</code>
+                  <br /><code>await sdk.uploadFile(docBuffer, userHash, "User", JSON.stringify({`{name: "kyc.pdf"}`}))</code>
                 </p>
               </div>
 
@@ -610,8 +1209,10 @@ function App() {
                 <strong>readFile(cid, userAddr)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Download and decrypt file from IPFS
-                  <br /><strong>Limitations:</strong> Requires file access permissions
-                  <br /><strong>Sample:</strong> <code>const fileBuffer = await sdk.readFile(cid)</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>const fileBuffer = await sdk.readFile("QmXyz123...", userAddress)</code>
+                  <br /><code>const docData = await sdk.readFile(cid)</code>
+                  <br /><code>const blob = new Blob([await sdk.readFile(fileCid)])</code>
                 </p>
               </div>
 
@@ -619,8 +1220,10 @@ function App() {
                 <strong>getAllFilesForUser(aadhaarHash)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> List all files for a specific user
-                  <br /><strong>Limitations:</strong> User must have access rights
-                  <br /><strong>Sample:</strong> <code>const files = await sdk.getAllFilesForUser(hash)</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>const files = await sdk.getAllFilesForUser(aadhaarHash)</code>
+                  <br /><code>const userFiles = await sdk.getAllFilesForUser("0xa1b2c3...")</code>
+                  <br /><code>console.log("User files:", await sdk.getAllFilesForUser(userHash))</code>
                 </p>
               </div>
 
@@ -628,8 +1231,10 @@ function App() {
                 <strong>getAllFilesByType(fileType)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Get all files of specific type
-                  <br /><strong>Limitations:</strong> Admin access only
-                  <br /><strong>Sample:</strong> <code>const files = await sdk.getAllFilesByType("User")</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>const userFiles = await sdk.getAllFilesByType("User")</code>
+                  <br /><code>const loanFiles = await sdk.getAllFilesByType("Loan")</code>
+                  <br /><code>const allDocs = await sdk.getAllFilesByType("Document")</code>
                 </p>
               </div>
             </div>
@@ -735,6 +1340,56 @@ function App() {
                   <strong>Purpose:</strong> Retrieve user's public key
                   <br /><strong>Limitations:</strong> User must be registered
                   <br /><strong>Sample:</strong> <code>const pubKey = await sdk.getUserPublicKey(hash)</code>
+                </p>
+              </div>
+            </div>
+
+            {/* DataManager Functions */}
+            <div style={{ border: '1px solid #dee2e6', borderRadius: '6px', padding: '1rem', backgroundColor: 'white' }}>
+              <h3 style={{ color: '#e83e8c', marginTop: 0 }}>📊 Data Management</h3>
+              
+              <div style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#e3f2fd', borderRadius: '4px' }}>
+                <strong>createRecord(recordId, ownerId, collection, dataJson)</strong>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
+                  <strong>Purpose:</strong> Create new data record in collection
+                  <br /><strong>Limitations:</strong> Unique record ID required, gas fees
+                  <br /><strong>Sample:</strong> <code>await sdk.createRecord(recordId, ownerId, "users", JSON.stringify(data))</code>
+                </p>
+              </div>
+
+              <div style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#e8f5e8', borderRadius: '4px' }}>
+                <strong>getRecord(recordId)</strong>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
+                  <strong>Purpose:</strong> Retrieve single record by ID
+                  <br /><strong>Limitations:</strong> Requires proper access permissions
+                  <br /><strong>Sample:</strong> <code>const record = await sdk.getRecord(recordId)</code>
+                </p>
+              </div>
+
+              <div style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
+                <strong>getRecordsByCollection(collection)</strong>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
+                  <strong>Purpose:</strong> Get all records in a collection
+                  <br /><strong>Limitations:</strong> Admin access may be required
+                  <br /><strong>Sample:</strong> <code>const records = await sdk.getRecordsByCollection("users")</code>
+                </p>
+              </div>
+
+              <div style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '4px' }}>
+                <strong>updateRecord(recordId, newDataJson)</strong>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
+                  <strong>Purpose:</strong> Update existing record data
+                  <br /><strong>Limitations:</strong> Only record owner or admin
+                  <br /><strong>Sample:</strong> <code>await sdk.updateRecord(recordId, JSON.stringify(newData))</code>
+                </p>
+              </div>
+
+              <div style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '4px' }}>
+                <strong>deleteRecord(recordId)</strong>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
+                  <strong>Purpose:</strong> Soft delete a record
+                  <br /><strong>Limitations:</strong> Admin or owner privileges required
+                  <br /><strong>Sample:</strong> <code>await sdk.deleteRecord(recordId)</code>
                 </p>
               </div>
             </div>
@@ -1176,10 +1831,321 @@ function App() {
         </section>
       )}
 
-      {/* 5. Admin Create User Flow */}
+      {/* 5. DataManager Operations */}
+      {showDataManagerSection && (
+        <section id="dataManagerSection">
+          <h2>5. Data Management System</h2>
+          <p style={{ color: '#e83e8c', fontWeight: 'bold' }}>
+            📊 Create, Read, Update, Delete records in collections
+          </p>
+          
+          {/* Record Creation */}
+          <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1.5rem', backgroundColor: '#f8f9fa' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>Create New Record</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+              <div className="form-group">
+                <label htmlFor="recordId">Record ID:</label>
+                <input
+                  type="text"
+                  id="recordId"
+                  value={recordId}
+                  onChange={(e) => setRecordId(e.target.value)}
+                  placeholder="unique-record-id"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="recordOwner">Owner (Aadhaar):</label>
+                <input
+                  type="text"
+                  id="recordOwner"
+                  value={recordOwner}
+                  onChange={(e) => setRecordOwner(e.target.value)}
+                  placeholder="Leave empty to use current user"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="recordCollection">Collection:</label>
+                <select
+                  id="recordCollection"
+                  value={recordCollection}
+                  onChange={(e) => setRecordCollection(e.target.value)}
+                >
+                  <option value="users">Users</option>
+                  <option value="products">Products</option>
+                  <option value="orders">Orders</option>
+                  <option value="documents">Documents</option>
+                  <option value="transactions">Transactions</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="recordData">Record Data (JSON):</label>
+              <textarea
+                id="recordData"
+                rows="4"
+                value={recordData}
+                onChange={(e) => setRecordData(e.target.value)}
+                placeholder='{"name":"John","age":30,"status":"active"}'
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <button onClick={handleCreateRecord} style={{ backgroundColor: '#e83e8c', color: 'white' }}>
+                Create Record
+              </button>
+              <button onClick={handleCheckRecordExists} style={{ backgroundColor: '#17a2b8', color: 'white' }}>
+                Check Exists
+              </button>
+              <button onClick={handleGetRecordMetadata} style={{ backgroundColor: '#6c757d', color: 'white' }}>
+                Get Metadata
+              </button>
+            </div>
+
+            {recordExists !== null && (
+              <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: recordExists ? '#d4edda' : '#f8d7da', borderRadius: '4px' }}>
+                <strong>Record Status:</strong> {recordExists ? '✅ Exists' : '❌ Not Found'}
+              </div>
+            )}
+
+            {recordMetadata && (
+              <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: '#e2e3e5', borderRadius: '4px' }}>
+                <strong>Record Metadata:</strong>
+                <pre style={{ margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>
+                  {JSON.stringify(recordMetadata, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          {/* Record Operations */}
+          <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1.5rem', backgroundColor: '#fff' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>Record Operations</h3>
+            
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <button onClick={handleGetRecord} style={{ backgroundColor: '#28a745', color: 'white' }}>
+                Get Single Record
+              </button>
+              <button onClick={handleGetAllRecords} style={{ backgroundColor: '#007bff', color: 'white' }}>
+                Get All Records
+              </button>
+              <button onClick={handleGetTotalRecords} style={{ backgroundColor: '#6f42c1', color: 'white' }}>
+                Get Total Count
+              </button>
+              <button
+                onClick={() => {
+                  setShowUpdateRecordForm(!showUpdateRecordForm);
+                  if (!showUpdateRecordForm) {
+                    setUpdateRecordId(recordId);
+                  }
+                }}
+                style={{ backgroundColor: '#fd7e14', color: 'white' }}
+              >
+                {showUpdateRecordForm ? "Cancel Update" : "Update Record"}
+              </button>
+            </div>
+
+            {totalRecords > 0 && (
+              <div style={{ padding: '0.75rem', backgroundColor: '#d1ecf1', borderRadius: '4px', marginBottom: '1rem' }}>
+                <strong>Total Records in System:</strong> {totalRecords}
+              </div>
+            )}
+
+            {/* Update Record Form */}
+            {showUpdateRecordForm && (
+              <div style={{ background: "#fff3cd", padding: "1rem", borderRadius: "4px", marginBottom: "1rem" }}>
+                <h4 style={{ margin: '0 0 1rem 0' }}>Update Record</h4>
+                <div className="form-group">
+                  <label htmlFor="updateRecordId">Record ID to Update:</label>
+                  <input
+                    type="text"
+                    id="updateRecordId"
+                    value={updateRecordId}
+                    onChange={(e) => setUpdateRecordId(e.target.value)}
+                    placeholder="record-id-to-update"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="updateRecordData">New Data (JSON):</label>
+                  <textarea
+                    id="updateRecordData"
+                    rows="3"
+                    value={updateRecordData}
+                    onChange={(e) => setUpdateRecordData(e.target.value)}
+                    placeholder='{"name":"Jane","age":25,"status":"updated"}'
+                  />
+                </div>
+                <button onClick={handleUpdateRecord} style={{ backgroundColor: '#28a745', color: 'white' }}>
+                  Submit Update
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Search Records */}
+          <div style={{ marginBottom: '2rem', border: '1px solid #dee2e6', borderRadius: '6px', padding: '1.5rem', backgroundColor: '#f8f9fa' }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>Search Records</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+              <div className="form-group">
+                <label htmlFor="searchCollection">Collection Filter:</label>
+                <select
+                  id="searchCollection"
+                  value={searchCollection}
+                  onChange={(e) => setSearchCollection(e.target.value)}
+                >
+                  <option value="users">Users</option>
+                  <option value="products">Products</option>
+                  <option value="orders">Orders</option>
+                  <option value="documents">Documents</option>
+                  <option value="transactions">Transactions</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="searchOwner">Owner Filter (Aadhaar):</label>
+                <input
+                  type="text"
+                  id="searchOwner"
+                  value={searchOwner}
+                  onChange={(e) => setSearchOwner(e.target.value)}
+                  placeholder="Leave empty for current user"
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <button onClick={handleGetRecordsByCollection} style={{ backgroundColor: '#17a2b8', color: 'white' }}>
+                Get by Collection
+              </button>
+              <button onClick={handleGetRecordsByOwner} style={{ backgroundColor: '#6c757d', color: 'white' }}>
+                Get by Owner
+              </button>
+              <button onClick={handleGetRecordsByCollectionAndOwner} style={{ backgroundColor: '#e83e8c', color: 'white' }}>
+                Get by Both
+              </button>
+              <button
+                onClick={() => {
+                  setRecords([]);
+                  setRecordExists(null);
+                  setRecordMetadata(null);
+                  setTotalRecords(0);
+                }}
+                style={{ backgroundColor: '#6c757d', color: 'white' }}
+              >
+                Clear Results
+              </button>
+            </div>
+          </div>
+
+          {/* Records Display */}
+          {records.length > 0 && (
+            <div style={{ 
+              marginBottom: '2rem', 
+              border: '1px solid #dee2e6', 
+              borderRadius: '6px', 
+              padding: '1.5rem',
+              backgroundColor: '#fff'
+            }}>
+              <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>
+                Records ({records.length})
+              </h3>
+              
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                {records.map((record, index) => (
+                  <div key={index} style={{
+                    border: '1px solid #e9ecef',
+                    borderRadius: '4px',
+                    padding: '1rem',
+                    backgroundColor: '#f8f9fa'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: '0.5rem'
+                    }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#495057' }}>
+                        Record #{index + 1}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteRecord(record.recordId || `record-${index}`)}
+                        style={{
+                          backgroundColor: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          fontSize: '0.8rem'
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                    <pre style={{
+                      margin: 0,
+                      fontSize: '0.85rem',
+                      background: '#fff',
+                      padding: '0.75rem',
+                      borderRadius: '3px',
+                      overflow: 'auto',
+                      maxHeight: '200px',
+                      border: '1px solid #dee2e6'
+                    }}>
+                      {JSON.stringify(record, null, 2)}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {records.length === 0 && (
+            <div style={{
+              padding: '2rem',
+              textAlign: 'center',
+              backgroundColor: '#f8f9fa',
+              border: '1px solid #dee2e6',
+              borderRadius: '6px',
+              color: '#6c757d'
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0' }}>No Records Found</h4>
+              <p style={{ margin: 0 }}>Create some records or use the search functions to load existing data.</p>
+            </div>
+          )}
+
+          {/* Raw Data Debug */}
+          <details style={{ marginTop: '1rem' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: '#6c757d' }}>
+              Show Raw Record Data (Debug)
+            </summary>
+            <pre style={{ 
+              background: '#f8f9fa', 
+              padding: '1rem', 
+              borderRadius: '4px', 
+              fontSize: '0.8rem',
+              overflow: 'auto',
+              border: '1px solid #dee2e6'
+            }}>
+              {JSON.stringify({
+                records,
+                totalRecords,
+                recordExists,
+                recordMetadata
+              }, null, 2)}
+            </pre>
+          </details>
+        </section>
+      )}
+
+      {/* 6. Admin Create User Flow */}
       {showAdminSection && (
         <section id="adminSection">
-          <h2>5. Admin Create User Flow</h2>
+          <h2>6. Admin Create User Flow</h2>
           <p style={{ color: '#dc3545', fontWeight: 'bold' }}>
             ⚠️ Admin Only - Create users with administrative privileges
           </p>
@@ -1260,7 +2226,7 @@ function App() {
       {/* 6. Function Role Assignment */}
       {showFunctionRoleSection && (
         <section id="functionRoleSection">
-          <h2>6. Function Role Assignment</h2>
+          <h2>7. Function Role Assignment</h2>
           <p style={{ color: '#6f42c1', fontWeight: 'bold' }}>
             🔒 Assign roles to specific contract functions
           </p>
@@ -1407,7 +2373,7 @@ function App() {
       {/* 7. Role Members Management */}
       {showRoleMembersSection && (
         <section id="roleMembersSection">
-          <h2>7. Role Members Management</h2>
+          <h2>8. Role Members Management</h2>
           <p style={{ color: '#17a2b8', fontWeight: 'bold' }}>
             👥 View members assigned to each role
           </p>
@@ -1556,7 +2522,7 @@ function App() {
       {/* 8. Role Functions Management */}
       {showRoleFunctionsSection && (
         <section id="roleFunctionsSection">
-          <h2>8. Role Functions Management</h2>
+          <h2>9. Role Functions Management</h2>
           <p style={{ color: '#28a745', fontWeight: 'bold' }}>
             🔧 View functions assigned to each role
           </p>
