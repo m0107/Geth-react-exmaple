@@ -65,6 +65,10 @@ function App() {
   const fileInputRef = useRef(null);
   const [fileMeta, setFileMeta] = useState("report.pdf");
   const [fileList, setFileList] = useState([]);
+  
+  // FileData download states
+  const [downloadFileData, setDownloadFileData] = useState("");
+  const [downloadingFileData, setDownloadingFileData] = useState(false);
 
   const [adminAadhaar, setAdminAadhaar] = useState("");
   const [adminName, setAdminName] = useState("");
@@ -292,6 +296,66 @@ function App() {
     } catch (e) {
       console.error(e);
       showStatus("error", "Download failed: " + e.message);
+    }
+  };
+
+  const handleDownloadByFileData = async () => {
+    const fileDataInput = downloadFileData.trim();
+    
+    if (!fileDataInput) {
+      showStatus("error", "Please enter valid fileData");
+      return;
+    }
+    
+    let fileData;
+    try {
+      // Parse fileData if it's a JSON string, otherwise assume it's already an array
+      fileData = typeof fileDataInput === 'string' && fileDataInput.startsWith('[') 
+        ? JSON.parse(fileDataInput) 
+        : fileDataInput;
+      
+      // Validate fileData structure
+      if (!Array.isArray(fileData) || fileData.length < 1) {
+        throw new Error("FileData must be an array with at least CID");
+      }
+    } catch (parseError) {
+      showStatus("error", "Invalid fileData format. Expected: [cid, aadhaarHash, fileType, metadata]");
+      return;
+    }
+    
+    setDownloadingFileData(true);
+    
+    try {
+      // Extract CID and filename from fileData
+      const [cid, , , filename] = fileData;
+      
+      if (!cid) {
+        throw new Error("CID not found in fileData");
+      }
+      
+      showStatus("info", `Downloading ${filename || 'file'} with CID: ${cid.slice(0, 20)}...`);
+      
+      // Use SDK's readFile method to download and decrypt the file
+      const fileBuffer = await sdk.readFile(cid);
+      
+      // Create a blob and download link
+      const blob = new Blob([fileBuffer]);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || `file_${cid.slice(0, 8)}.bin`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      showStatus("success", `File downloaded successfully: ${filename || cid.slice(0, 20) + '...'}`);
+      setDownloadFileData(""); // Clear the input after successful download
+    } catch (e) {
+      console.error(e);
+      showStatus("error", `Download failed: ${e.message}`);
+    } finally {
+      setDownloadingFileData(false);
     }
   };
 
@@ -1005,8 +1069,8 @@ function App() {
                         </button>
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(cid);
-                            showStatus("info", "CID copied to clipboard");
+                            navigator.clipboard.writeText(JSON.stringify(file));
+                            showStatus("info", "FileData copied to clipboard");
                           }}
                           style={{
                             backgroundColor: '#6c757d',
@@ -1019,7 +1083,7 @@ function App() {
                             whiteSpace: 'nowrap'
                           }}
                         >
-                          📋 Copy CID
+                          📋 Copy FileData
                         </button>
                       </div>
                     </div>
@@ -1058,6 +1122,57 @@ function App() {
               {JSON.stringify(fileList, null, 2)}
             </pre>
           </details>
+          
+          {/* CID Download Section */}
+          <div style={{
+            marginTop: '2rem',
+            padding: '1.5rem',
+            border: '2px solid #007bff',
+            borderRadius: '8px',
+            backgroundColor: '#f0f7ff'
+          }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#007bff' }}>
+              📥 Download File by CID
+            </h3>
+            <p style={{ margin: '0 0 1rem 0', color: '#6c757d', fontSize: '0.9rem' }}>
+              Enter any IPFS CID to download and decrypt the file (requires access permissions)
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <input
+                type="text"
+                value={downloadFileData}
+                onChange={(e) => setDownloadFileData(e.target.value)}
+                placeholder='Enter fileData (e.g., ["QmXoY...", "0xAadhaar...", "User", "filename.pdf"])'
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ced4da',
+                  borderRadius: '4px',
+                  fontSize: '0.9rem',
+                  fontFamily: 'monospace'
+                }}
+                disabled={downloadingFileData}
+              />
+              <button
+                onClick={handleDownloadByFileData}
+                disabled={!downloadFileData.trim() || downloadingFileData}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: downloadingFileData ? '#6c757d' : '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: downloadingFileData ? 'not-allowed' : 'pointer',
+                  fontSize: '0.9rem',
+                  fontWeight: 'bold',
+                  alignSelf: 'flex-start'
+                }}
+              >
+                {downloadingFileData ? '📥 Downloading...' : '📥 Download'}
+              </button>
+            </div>
+          </div>
         </section>
       )}
 
