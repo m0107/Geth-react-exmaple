@@ -80,6 +80,7 @@ function App() {
 
   const fileInputRef = useRef(null);
   const [fileMeta, setFileMeta] = useState("report.pdf");
+  const [fileType, setFileType] = useState("User");
   const [fileList, setFileList] = useState([]);
   
   // FileData download states
@@ -118,6 +119,7 @@ function App() {
     { name: "Update Loan", signature: "updateLoan(bytes32,string)" },
     { name: "Get Loan By ID", signature: "getLoanByLoanId(bytes32)" },
     { name: "Get All Loans By User", signature: "getAllLoansByUser(bytes32)" },
+    { name: "Get All Loans", signature: "getAllLoans()" },
     { name: "Upload File", signature: "uploadFile(bytes,bytes32,string,string)" },
     { name: "Read File", signature: "readFile(string,address)" },
     { name: "Get All Files For User", signature: "getAllFilesForUser(bytes32)" },
@@ -277,7 +279,7 @@ function App() {
       if (!fileMeta.trim()) return alert("Enter file metadata");
 
       showStatus("info", "Uploading file to IPFS...");
-      const { cid } = await sdk.uploadFile(buf, ah, "User", fileMeta.trim());
+      const { cid } = await sdk.uploadFile(buf, ah, fileType, fileMeta.trim());
       showStatus("success", `Uploaded: ${cid}`);
     } catch (e) {
       console.error(e);
@@ -954,32 +956,40 @@ function App() {
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ fontWeight: 'bold', color: '#495057' }}>createLoan(loanIdHash, userAadhaarHash, loanDetailsJson)</div>
                 <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Create new loan record</div>
-                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
-                  <strong>RBAC:</strong> ⚠️ LOAN_OFFICER_ROLE or ADMIN_ROLE required
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public function)
                 </div>
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ fontWeight: 'bold', color: '#495057' }}>updateLoan(loanIdHash, newDataJson)</div>
                 <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Update loan information</div>
-                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
-                  <strong>RBAC:</strong> ⚠️ LOAN_OFFICER_ROLE or ADMIN_ROLE required
+                <div style={{ padding: '0.5rem', backgroundColor: '#f8d7da', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> 🔒 Role must be assigned to function via assignFunctionRole()
                 </div>
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ fontWeight: 'bold', color: '#495057' }}>getLoanByLoanId(loanIdHash)</div>
                 <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Retrieve specific loan details</div>
-                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
-                  <strong>RBAC:</strong> ⚠️ Loan borrower, LOAN_OFFICER_ROLE, or ADMIN_ROLE
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public view function)
                 </div>
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ fontWeight: 'bold', color: '#495057' }}>getAllLoansByUser(userAadhaarHash)</div>
                 <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Get all loans for a user</div>
-                <div style={{ padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '3px', fontSize: '0.85rem' }}>
-                  <strong>RBAC:</strong> ⚠️ Own loans, LOAN_OFFICER_ROLE, or ADMIN_ROLE
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public view function)
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ fontWeight: 'bold', color: '#495057' }}>getAllLoans()</div>
+                <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>Get all loans in the system</div>
+                <div style={{ padding: '0.5rem', backgroundColor: '#d4edda', borderRadius: '3px', fontSize: '0.85rem' }}>
+                  <strong>RBAC:</strong> ✅ No restrictions (Public view function)
                 </div>
               </div>
             </div>
@@ -1274,8 +1284,21 @@ function App() {
                 <strong>getAllLoansByUser(userAadhaarHash)</strong>
                 <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
                   <strong>Purpose:</strong> Get all loans for a user
-                  <br /><strong>Limitations:</strong> User or authorized personnel only
-                  <br /><strong>Sample:</strong> <code>const loans = await sdk.getAllLoansByUser(userHash)</code>
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>const loans = await sdk.getAllLoansByUser(userHash)</code>
+                  <br /><code>const userLoans = await sdk.getAllLoansByUser(aadhaarHash)</code>
+                  <br /><code>console.log("User loans:", await sdk.getAllLoansByUser("0xa1b2c3..."))</code>
+                </p>
+              </div>
+
+              <div style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#e8f5e8', borderRadius: '4px' }}>
+                <strong>getAllLoans()</strong>
+                <p style={{ margin: '0.5rem 0', fontSize: '0.9rem' }}>
+                  <strong>Purpose:</strong> Get all loans in the system
+                  <br /><strong>Examples:</strong> 
+                  <br /><code>const allLoans = await sdk.getAllLoans()</code>
+                  <br /><code>const loanList = await sdk.getAllLoans()</code>
+                  <br /><code>console.log("Total loans:", (await sdk.getAllLoans()).length)</code>
                 </p>
               </div>
             </div>
@@ -1656,13 +1679,26 @@ function App() {
             <input type="file" id="fileInput" ref={fileInputRef} />
           </div>
           <div className="form-group">
+            <label htmlFor="fileType">File Type:</label>
+            <select
+              id="fileType"
+              value={fileType}
+              onChange={(e) => setFileType(e.target.value)}
+              style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+            >
+              <option value="User">User</option>
+              <option value="Loan">Loan</option>
+              <option value="Data">Data</option>
+            </select>
+          </div>
+          <div className="form-group">
             <label htmlFor="fileMeta">Metadata:</label>
             <input
               type="text"
               id="fileMeta"
               value={fileMeta}
               onChange={(e) => setFileMeta(e.target.value)}
-              placeholder="e.g. report.pdf"
+              placeholder="e.g. report.pdf, description, etc."
             />
           </div>
           <button onClick={handleUploadFile}>Upload to IPFS</button>
