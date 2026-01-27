@@ -1529,9 +1529,6 @@ function App() {
 
           <div style={{ marginTop: '2rem', borderTop: '1px solid #dee2e6', paddingTop: '1.5rem' }}>
             <h3>All Users Management</h3>
-            <p style={{ color: '#dc3545', fontSize: '0.9rem', marginBottom: '1rem' }}>
-              ⚠️ Admin Only - Requires admin privileges to view all users
-            </p>
             
             <div style={{ marginBottom: '1rem' }}>
               <button 
