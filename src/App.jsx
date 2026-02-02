@@ -107,7 +107,22 @@ function App() {
   const [roleFunctions, setRoleFunctions] = useState({});
   const [showRoleFunctionsSection, setShowRoleFunctionsSection] = useState(false);
 
+  // Create Role states
+  const [newRoleName, setNewRoleName] = useState("");
+  const [adminRoleName, setAdminRoleName] = useState("ADMIN_ROLE");
+  const [showCreateRoleSection, setShowCreateRoleSection] = useState(false);
+  
+  // Grant Role states
+  const [grantRoleName, setGrantRoleName] = useState("");
+  const [grantRoleAadhaar, setGrantRoleAadhaar] = useState("");
+  const [showGrantRoleSection, setShowGrantRoleSection] = useState(false);
+
   const [initialized, setInitialized] = useState(false);
+
+  // Helper function to check if a string is already a hex hash
+  const isHexHash = (str) => {
+    return /^0x[a-fA-F0-9]{64}$/.test(str);
+  };
 
   // Available functions with their signatures (Blockchain Contract Functions)
   const availableFunctions = [
@@ -187,6 +202,8 @@ function App() {
       setShowFunctionRoleSection(true);
       setShowRoleMembersSection(true);
       setShowRoleFunctionsSection(true);
+      setShowCreateRoleSection(true);
+      setShowGrantRoleSection(true);
       await loadUser();
     } catch (e) {
       console.error(e);
@@ -233,7 +250,8 @@ function App() {
 
   const handleCreateLoan = async () => {
     const ah = sdk.web3.utils.keccak256(aadhaar);
-    const lid = sdk.web3.utils.keccak256(loanId.trim());
+    const trimmedLoanId = loanId.trim();
+    const lid = isHexHash(trimmedLoanId) ? trimmedLoanId : sdk.web3.utils.keccak256(trimmedLoanId);
     try {
       await sdk.createLoan(lid, ah, loanDetails.trim());
       showStatus("success", "Loan created");
@@ -256,8 +274,11 @@ function App() {
   };
 
   const handleUpdateLoan = async () => {
-    const lid = sdk.web3.utils.keccak256(updLoanId.trim());
+    const trimmedUpdLoanId = updLoanId.trim();
+    console.log(trimmedUpdLoanId);
+    const lid = isHexHash(trimmedUpdLoanId) ? trimmedUpdLoanId : sdk.web3.utils.keccak256(trimmedUpdLoanId);
     try {
+      console.log("Updating loan:", lid);
       await sdk.updateLoan(lid, updLoanData.trim());
       showStatus("success", "Loan updated");
       setShowUpdateLoanForm(false);
@@ -527,6 +548,49 @@ function App() {
     } catch (e) {
       console.error(e);
       showStatus("error", "Failed to get role functions: " + e.message);
+    }
+  };
+
+  // Create Role Handler
+  const handleCreateRole = async () => {
+    if (!newRoleName.trim() || !adminRoleName.trim()) {
+      return showStatus("error", "Please enter both role name and admin role name");
+    }
+    
+    try {
+      showStatus("info", `Creating role ${newRoleName} with admin role ${adminRoleName}...`);
+      await sdk.createRole(newRoleName.trim(), adminRoleName.trim());
+      showStatus("success", `Successfully created role: ${newRoleName}`);
+      setNewRoleName("");
+      setAdminRoleName("ADMIN_ROLE");
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Create role failed: " + e.message);
+    }
+  };
+
+  // Grant Role Handler
+  const handleGrantRoleByName = async () => {
+    if (!grantRoleName.trim() || !grantRoleAadhaar.trim()) {
+      return showStatus("error", "Please enter both role name and aadhaar");
+    }
+    
+    // Basic aadhaar validation (12 digits)
+    if (!/^\d{12}$/.test(grantRoleAadhaar.trim())) {
+      return showStatus("error", "Please enter a valid 12-digit Aadhaar number");
+    }
+    
+    try {
+      // Convert aadhaar to hash
+      const aadhaarHash = sdk.web3.utils.keccak256(grantRoleAadhaar.trim());
+      showStatus("info", `Granting role ${grantRoleName} to Aadhaar ${grantRoleAadhaar}...`);
+      await sdk.grantRole(grantRoleName.trim(), aadhaarHash);
+      showStatus("success", `Successfully granted role ${grantRoleName} to Aadhaar ${grantRoleAadhaar}`);
+      setGrantRoleName("");
+      setGrantRoleAadhaar("");
+    } catch (e) {
+      console.error(e);
+      showStatus("error", "Grant role failed: " + e.message);
     }
   };
 
@@ -1652,7 +1716,7 @@ function App() {
           {showUpdateLoanForm && (
             <div style={{ background: "#fff3cd", padding: "1rem", borderRadius: "4px", marginTop: "1rem" }}>
               <div className="form-group">
-                <label htmlFor="updLoanId">Loan ID (string):</label>
+                <label htmlFor="updLoanId">Loan ID (original or hex):</label>
                 <input type="text" id="updLoanId" value={updLoanId} onChange={(e) => setUpdLoanId(e.target.value)} />
               </div>
               <div className="form-group">
@@ -2403,10 +2467,229 @@ function App() {
         </section>
       )}
 
-      {/* 7. Role Members Management */}
+      {/* 7. Create Role Section */}
+      {showCreateRoleSection && (
+        <section id="createRoleSection">
+          <h2>7. Create Role</h2>
+          <p style={{ color: '#28a745', fontWeight: 'bold' }}>
+            🛠️ Create new roles for access control
+          </p>
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+            gap: '1rem',
+            marginBottom: '1.5rem'
+          }}>
+            <div className="form-group">
+              <label htmlFor="newRoleNameInput">New Role Name:</label>
+              <input
+                id="newRoleNameInput"
+                type="text"
+                value={newRoleName}
+                onChange={(e) => setNewRoleName(e.target.value)}
+                placeholder="e.g., LOAN_OFFICER"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '1rem'
+                }}
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="adminRoleNameInput">Admin Role Name:</label>
+              <input
+                id="adminRoleNameInput"
+                type="text"
+                value={adminRoleName}
+                onChange={(e) => setAdminRoleName(e.target.value)}
+                placeholder="ADMIN_ROLE"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '1rem'
+                }}
+              />
+            </div>
+          </div>
+
+          {newRoleName && adminRoleName && (
+            <div style={{
+              background: '#e8f5e8',
+              border: '1px solid #28a745',
+              borderRadius: '6px',
+              padding: '1rem',
+              marginBottom: '1rem'
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', color: '#155724' }}>Role Creation Preview</h4>
+              <p style={{ margin: '0', fontFamily: 'monospace', fontSize: '0.9rem' }}>
+                <strong>New Role:</strong> {newRoleName}<br/>
+                <strong>Admin Role:</strong> {adminRoleName}
+              </p>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <button 
+              onClick={handleCreateRole}
+              disabled={!newRoleName.trim() || !adminRoleName.trim()}
+              style={{ 
+                backgroundColor: newRoleName.trim() && adminRoleName.trim() ? '#28a745' : '#6c757d',
+                color: 'white',
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: newRoleName.trim() && adminRoleName.trim() ? 'pointer' : 'not-allowed',
+                fontSize: '1rem',
+                fontWeight: 'bold'
+              }}
+            >
+              Create Role
+            </button>
+            
+            <button
+              onClick={() => {
+                setNewRoleName("");
+                setAdminRoleName("ADMIN_ROLE");
+              }}
+              style={{
+                backgroundColor: '#6c757d',
+                color: 'white',
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '1rem'
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* 8. Grant Role Section */}
+      {showGrantRoleSection && (
+        <section id="grantRoleSection">
+          <h2>8. Grant Role</h2>
+          <p style={{ color: '#17a2b8', fontWeight: 'bold' }}>
+            👥 Grant roles to specific addresses
+          </p>
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+            gap: '1rem',
+            marginBottom: '1.5rem'
+          }}>
+            <div className="form-group">
+              <label htmlFor="grantRoleNameSelect">Role to Grant:</label>
+              <select
+                id="grantRoleNameSelect"
+                value={grantRoleName}
+                onChange={(e) => setGrantRoleName(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '1rem'
+                }}
+              >
+                <option value="">-- Select Role --</option>
+                {availableRoles.map((role) => (
+                  <option key={role} value={role}>
+                    {role.replace('_', ' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="grantRoleAadhaarInput">Aadhaar Number:</label>
+              <input
+                id="grantRoleAadhaarInput"
+                type="text"
+                value={grantRoleAadhaar}
+                onChange={(e) => setGrantRoleAadhaar(e.target.value)}
+                placeholder="123412341234"
+                maxLength="12"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '1rem',
+                  fontFamily: 'monospace'
+                }}
+              />
+            </div>
+          </div>
+
+          {grantRoleName && grantRoleAadhaar && (
+            <div style={{
+              background: '#e1f5fe',
+              border: '1px solid #17a2b8',
+              borderRadius: '6px',
+              padding: '1rem',
+              marginBottom: '1rem'
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', color: '#0c5460' }}>Grant Role Preview</h4>
+              <p style={{ margin: '0', fontFamily: 'monospace', fontSize: '0.9rem' }}>
+                <strong>Role:</strong> {grantRoleName}<br/>
+                <strong>Aadhaar:</strong> {grantRoleAadhaar}
+              </p>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <button 
+              onClick={handleGrantRoleByName}
+              disabled={!grantRoleName.trim() || !grantRoleAadhaar.trim()}
+              style={{ 
+                backgroundColor: grantRoleName.trim() && grantRoleAadhaar.trim() ? '#17a2b8' : '#6c757d',
+                color: 'white',
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: grantRoleName.trim() && grantRoleAadhaar.trim() ? 'pointer' : 'not-allowed',
+                fontSize: '1rem',
+                fontWeight: 'bold'
+              }}
+            >
+              Grant Role
+            </button>
+            
+            <button
+              onClick={() => {
+                setGrantRoleName("");
+                setGrantRoleAadhaar("");
+              }}
+              style={{
+                backgroundColor: '#6c757d',
+                color: 'white',
+                padding: '0.75rem 1.5rem',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '1rem'
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* 9. Role Members Management */}
       {showRoleMembersSection && (
         <section id="roleMembersSection">
-          <h2>8. Role Members Management</h2>
+          <h2>9. Role Members Management</h2>
           <p style={{ color: '#17a2b8', fontWeight: 'bold' }}>
             👥 View members assigned to each role
           </p>
@@ -2555,7 +2838,7 @@ function App() {
       {/* 8. Role Functions Management */}
       {showRoleFunctionsSection && (
         <section id="roleFunctionsSection">
-          <h2>9. Role Functions Management</h2>
+          <h2>10. Role Functions Management</h2>
           <p style={{ color: '#28a745', fontWeight: 'bold' }}>
             🔧 View functions assigned to each role
           </p>
