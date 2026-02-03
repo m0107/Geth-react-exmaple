@@ -139,9 +139,9 @@ function App() {
     { name: "Read File", signature: "readFile(string,address)" },
     { name: "Get All Files For User", signature: "getAllFilesForUser(bytes32)" },
     { name: "Get All Files By Type", signature: "getAllFilesByType(string)" },
-    { name: "Create Role", signature: "createRole(bytes32,bytes32)" },
-    { name: "Grant Role", signature: "grantRole(bytes32,address)" },
-    { name: "Revoke Role", signature: "revokeRole(bytes32,address)" },
+    { name: "Create Role", signature: "createRole(string,string)" },
+    { name: "Grant Role By Name", signature: "grantRoleByName(string,address)" },
+    { name: "Revoke Role By Name", signature: "revokeRoleByName(string,address)" },
     { name: "Has Role", signature: "hasRole(bytes32,address)" },
     { name: "Get Role Members", signature: "getRoleMembers(bytes32)" },
     { name: "Get Functions By Role", signature: "getFunctionsByRole(bytes32)" },
@@ -169,7 +169,7 @@ function App() {
     "LOAN_OFFICER", // Example custom role for loan operations
     "OPERATOR", // Example custom role for operations
     "VIEWER", // Example custom role for read-only access
-    "AUDITOR", // Example custom role for audit functions
+    "TESTMOHITDEMO", // Example custom role for audit functions
   ];
 
   const handleInit = async () => {
@@ -444,7 +444,14 @@ function App() {
     
     try {
       showStatus("info", `Assigning ${selectedRole} to function ${selectedFunction}...`);
-      await sdk.assignFunctionRolesFor(selectedRole, selectedFunction);
+      
+      // Calculate the correct function selector
+      const selector = sdk.web3.eth.abi.encodeFunctionSignature(selectedFunction);
+      console.log(`Function selector for ${selectedFunction}: ${selector}`);
+      
+      // Use direct SDK call instead of assignFunctionRolesFor
+      await sdk._send("RBACManager", "assignFunctionRole", [selectedRole, selector]);
+      
       showStatus("success", `Successfully assigned ${selectedRole} to ${selectedFunction}`);
     } catch (e) {
       console.error(e);
