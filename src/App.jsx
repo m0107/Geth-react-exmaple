@@ -19,6 +19,9 @@ function App() {
         process.env.REACT_APP_ENT_PASSWORD,
         process.env.REACT_APP_DIGILOCKER_API_BASE
       );
+      // Private chain: zero gas fees — no ETH needed for transactions
+      sdkRef.current.web3.eth.defaultGasPrice = "0";
+      sdkRef.current.web3.eth.getGasPrice = async () => "0";
       console.log("SDK initialized:", sdkRef.current);
       console.log("SDK instance:", process.env);
       console.log("process.BLC_FUND_API_BASE", process.env.REACT_APP_BLC_FUND_API_BASE, process.env.REACT_APP_RPC_URL);
@@ -145,12 +148,17 @@ function App() {
     { name: "Has Role", signature: "hasRole(bytes32,address)" },
     { name: "Get Role Members", signature: "getRoleMembers(bytes32)" },
     { name: "Get Functions By Role", signature: "getFunctionsByRole(bytes32)" },
+    { name: "Get Role Count", signature: "getRoleCount()" },
+    { name: "Get All Roles", signature: "getAllRoles()" },
+    { name: "Get Role Name", signature: "getRoleName(bytes32)" },
+    { name: "Role Exists", signature: "roleExists(bytes32)" },
     { name: "Register Public Key", signature: "registerPublicKey(address,string)" },
     { name: "Get User Public Key", signature: "getUserPublicKey(bytes32)" },
     { name: "Request OTP", signature: "requestOtp(bytes32)" },
     { name: "Submit OTP", signature: "submitOtp(bytes32,string,address)" },
     { name: "Fund Account", signature: "fundAccount(address,uint256)" },
     { name: "Create Default Admin", signature: "createDefaultAdmin(bytes32,string,string)" },
+    { name: "Create User By Admin", signature: "createUserByAdmin(bytes32,string,string,address)" },
     { name: "Create Record", signature: "createRecord(bytes32,bytes32,string,string)" },
     { name: "Update Record", signature: "updateRecord(bytes32,string)" },
     { name: "Delete Record", signature: "deleteRecord(bytes32)" },
@@ -161,16 +169,23 @@ function App() {
     { name: "Batch Create Records", signature: "batchCreateRecords(bytes32[],bytes32[],string[],string[])" }
   ];
 
-  // Note: These are example roles - actual roles should be fetched from your smart contract
-  const availableRoles = [
-    "ADMIN_ROLE", // Only predefined role
-    "DATA_MANAGER", // Example custom role for DataManager functions
-    "USER_MANAGER", // Example custom role for user management
-    "LOAN_OFFICER", // Example custom role for loan operations
-    "OPERATOR", // Example custom role for operations
-    "VIEWER", // Example custom role for read-only access
-    "TESTMOHITDEMO", // Example custom role for audit functions
-  ];
+  // Note: Roles are now fetched dynamically from on-chain via getAllRolesWithNames()
+  const [availableRoles, setAvailableRoles] = useState([
+    "ADMIN_ROLE", // Bootstrap role - always exists
+  ]);
+
+  // Fetch roles from contract
+  const fetchRolesFromContract = async () => {
+    try {
+      const rolesWithNames = await sdk.getAllRolesWithNames();
+      const roleNames = rolesWithNames.map(r => r.name).filter(n => n.length > 0);
+      if (roleNames.length > 0) {
+        setAvailableRoles(roleNames);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch roles from contract:", e.message);
+    }
+  };
 
   const handleInit = async () => {
     if (!/^\d{12}$/.test(aadhaar)) {
@@ -204,6 +219,8 @@ function App() {
       setShowRoleFunctionsSection(true);
       setShowCreateRoleSection(true);
       setShowGrantRoleSection(true);
+      // Fetch roles from contract after init
+      try { await fetchRolesFromContract(); } catch (e) { console.warn("Role fetch failed:", e); }
       await loadUser();
     } catch (e) {
       console.error(e);
@@ -570,6 +587,8 @@ function App() {
       showStatus("success", `Successfully created role: ${newRoleName}`);
       setNewRoleName("");
       setAdminRoleName("ADMIN_ROLE");
+      // Refresh roles list from contract
+      try { await fetchRolesFromContract(); } catch (e) { console.warn("Role refresh failed:", e); }
     } catch (e) {
       console.error(e);
       showStatus("error", "Create role failed: " + e.message);
@@ -2255,7 +2274,7 @@ function App() {
           </p>
           
           <div className="form-group">
-            <label htmlFor="adminAadhaar">Admin Aadhaar Number:</label>
+            <label htmlFor="adminAadhaar">User Aadhaar Number:</label>
             <input
               type="text"
               id="adminAadhaar"
@@ -2323,6 +2342,172 @@ function App() {
 
           <button onClick={handleAdminCreateUser} style={{ backgroundColor: '#dc3545', color: 'white' }}>
             Create Admin User
+          </button>
+        </section>
+      )}
+
+      {/* 6b. Historical Data Migration - createUserByAdmin (bypasses Aadhaar verification) */}
+      {showAdminSection && (
+        <section id="historicalMigrationSection" style={{ borderLeft: '4px solid #ff8c00' }}>
+          <h2>6b. Historical Data Migration</h2>
+          <p style={{ color: '#ff8c00', fontWeight: 'bold' }}>
+            📦 Deployer Only — Import backdated users without Aadhaar verification
+          </p>
+          <div style={{
+            background: '#fff3e0',
+            border: '1px solid #ff8c00',
+            borderRadius: '6px',
+            padding: '1rem',
+            marginBottom: '1rem'
+          }}>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#e65100' }}>
+              <strong>⚠️ This is different from Admin Create User above.</strong><br/>
+              • <strong>Admin Create User (6)</strong>: Uses OTP/Aadhaar verification flow via <code>createNewUser()</code><br/>
+              • <strong>Historical Migration (6b)</strong>: Bypasses all verification via <code>createUserByAdmin()</code>. 
+              Only the contract deployer wallet can call this. Use for importing existing/backdated data into the blockchain.<br/>
+              • Creates a <strong>new wallet</strong> for each user, funds it, registers keys, and stores the encrypted wallet.
+            </p>
+          </div>
+
+          <div style={{ background: '#f8f9fa', padding: '1rem', borderRadius: '4px', marginBottom: '1rem' }}>
+            <div className="form-group">
+              <label htmlFor="migrateAadhaar">Aadhaar Number (12 digits):</label>
+              <input
+                type="text"
+                id="migrateAadhaar"
+                placeholder="123412341234"
+                maxLength={12}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="migrateName">Name:</label>
+              <input type="text" id="migrateName" placeholder="John Doe" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="migratePhone">Phone:</label>
+              <input type="text" id="migratePhone" placeholder="9876543210" maxLength={10} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="migrateRole">Role:</label>
+              <input type="text" id="migrateRole" placeholder="user" defaultValue="user" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="migrateData">Additional Data (JSON, optional):</label>
+              <textarea
+                id="migrateData"
+                rows="2"
+                placeholder='{"department":"Finance","note":"Backdated import"}'
+                defaultValue='{}'
+              />
+            </div>
+          </div>
+
+          <button 
+            onClick={async () => {
+              const aadhaarInput = document.getElementById('migrateAadhaar').value.trim();
+              const nameInput = document.getElementById('migrateName').value.trim();
+              const phoneInput = document.getElementById('migratePhone').value.trim();
+              const roleInput = document.getElementById('migrateRole').value.trim() || 'user';
+              const extraDataInput = document.getElementById('migrateData').value.trim();
+
+              if (!/^\d{12}$/.test(aadhaarInput)) {
+                return showStatus('error', 'Enter valid 12-digit Aadhaar');
+              }
+              if (!nameInput) {
+                return showStatus('error', 'Name is required');
+              }
+
+              let extraData = {};
+              if (extraDataInput) {
+                try { extraData = JSON.parse(extraDataInput); } catch {
+                  return showStatus('error', 'Invalid JSON in additional data');
+                }
+              }
+
+              try {
+                showStatus('info', `Migrating user ${nameInput} (${aadhaarInput})...\nPlease wait — this involves multiple on-chain transactions.`);
+
+                // Step 1: Generate a NEW wallet for the migrated user
+                console.log('[6b] Step 1: Generating new wallet...');
+                const newWallet = sdk.web3.eth.accounts.create();
+                const userPrivateKey = newWallet.privateKey;
+                const userAddress = newWallet.address;
+                console.log('[6b] New user address:', userAddress);
+
+                // Derive public key: temporarily apply the new account to get publicKeyHex
+                const savedDeployerKey = sdk.privateKey;
+                sdk._applyAccount(userPrivateKey);
+                const publicKeyHex = sdk.publicKeyHex;
+                // Restore deployer immediately
+                sdk._applyAccount(savedDeployerKey);
+                console.log('[6b] Public key:', publicKeyHex.slice(0, 24) + '...');
+
+                // Step 2: Fund the new wallet via faucet
+                console.log('[6b] Step 2: Funding new wallet...');
+                await sdk.fundAccount(userAddress, '0.20');
+
+                // Step 3: Build user data JSON
+                const aadhaarHash = sdk.web3.utils.keccak256(aadhaarInput);
+                const dataJson = JSON.stringify({
+                  ...extraData,
+                  name: nameInput,
+                  phone: phoneInput,
+                  role: roleInput,
+                  address: userAddress,
+                  aadhaar: aadhaarInput,
+                  createdAt: new Date().toISOString(),
+                  note: extraData.note || 'Historical data migration via UI',
+                });
+
+                // Step 4: createUserByAdmin (deployer must be the signer)
+                // SDK should already be authenticated as deployer
+                console.log('[6b] Step 3: Calling createUserByAdmin...');
+                await sdk.createUserByAdmin(aadhaarHash, dataJson, publicKeyHex, userAddress);
+
+                // Step 5: Register public key on KeyRegistry (deployer can call this for any address)
+                console.log('[6b] Step 4: Registering public key on KeyRegistry...');
+                try {
+                  await sdk.registerPublicKey(userAddress, publicKeyHex);
+                } catch (e) {
+                  console.warn('[6b] registerPublicKey non-fatal:', e.message);
+                }
+
+                // Step 6: Store the user's private key in the BLC key-store API
+                console.log('[6b] Step 5: Storing key in key-store API...');
+                try {
+                  await sdk.storeKeyDual(aadhaarHash, userPrivateKey);
+                } catch (e) {
+                  console.warn('[6b] storeKeyDual non-fatal:', e.message);
+                }
+
+                // Step 7: Store encrypted wallet locally (triggers PIN prompt + file download)
+                console.log('[6b] Step 6: Storing encrypted wallet...');
+                try {
+                  // Temporarily switch to the new user's key for wallet storage
+                  sdk._applyAccount(userPrivateKey);
+                  await sdk._storePrivateKey(aadhaarHash, userPrivateKey, aadhaarInput);
+                } catch (e) {
+                  console.warn('[6b] _storePrivateKey non-fatal:', e.message);
+                } finally {
+                  // Restore deployer context
+                  sdk._applyAccount(savedDeployerKey);
+                }
+
+                showStatus('success',
+                  `✅ User "${nameInput}" migrated successfully!\n\n` +
+                  `Aadhaar: ${aadhaarInput}\n` +
+                  `Address: ${userAddress}\n` +
+                  `Hash: ${aadhaarHash}\n\n` +
+                  `A wallet file has been downloaded. The user can import it via "Import Wallet".`
+                );
+              } catch (e) {
+                console.error('[6b] Migration failed:', e);
+                showStatus('error', 'Historical migration failed: ' + e.message);
+              }
+            }}
+            style={{ backgroundColor: '#ff8c00', color: 'white', fontWeight: 'bold' }}
+          >
+            Migrate Historical User (Full Flow)
           </button>
         </section>
       )}
@@ -2830,14 +3015,24 @@ function App() {
           }}>
             <h4 style={{ margin: '0 0 0.5rem 0', color: '#856404' }}>📝 Note about Roles</h4>
             <p style={{ margin: 0, fontSize: '0.9rem' }}>
-              The roles shown above are examples. Your smart contract may have different roles. 
-              To get the actual roles from your contract, you would need to:
+              Roles are now fetched dynamically from the blockchain using <code>getAllRolesWithNames()</code>.
+              They are automatically refreshed when you log in or create a new role.
             </p>
-            <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.9rem' }}>
-              <li>Add a function to your contract to list all existing roles</li>
-              <li>Query role creation events from the blockchain</li>
-              <li>Or manually add the specific roles used in your contract</li>
-            </ul>
+            <button
+              onClick={fetchRolesFromContract}
+              style={{
+                marginTop: '0.5rem',
+                backgroundColor: '#856404',
+                color: 'white',
+                padding: '0.4rem 1rem',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '0.85rem'
+              }}
+            >
+              🔄 Refresh Roles from Contract
+            </button>
           </div>
         </section>
       )}
